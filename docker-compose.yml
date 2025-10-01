@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  cashbarber-api:
+    build: .
+    container_name: cashbarber-api
+    ports:
+      - "5300:5300"
+    environment:
+      - PORT=5300
+      - FLASK_ENV=production
+    restart: unless-stopped
+    mem_limit: 2g
+    cpus: 1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5300/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
