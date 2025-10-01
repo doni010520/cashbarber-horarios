@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y \
     gnupg \
     unzip \
     curl \
+    jq \
     ca-certificates \
     fonts-liberation \
     libasound2 \
@@ -35,12 +36,16 @@ RUN wget -q -O /tmp/google-chrome-stable_current_amd64.deb https://dl.google.com
     && rm /tmp/google-chrome-stable_current_amd64.deb \
     && rm -rf /var/lib/apt/lists/*
 
-# Instalar ChromeDriver manualmente
-RUN CHROMEDRIVER_VERSION=$(curl -sS chromedriver.storage.googleapis.com/LATEST_RELEASE) && \
-    wget -q -O /tmp/chromedriver_linux64.zip https://chromedriver.storage.googleapis.com/$CHROMEDRIVER_VERSION/chromedriver_linux64.zip && \
-    unzip /tmp/chromedriver_linux64.zip -d /usr/local/bin/ && \
-    rm /tmp/chromedriver_linux64.zip && \
-    chmod +x /usr/local/bin/chromedriver
+# Instalar ChromeDriver compatível com a versão do Chrome instalada
+RUN CHROME_VERSION=$(google-chrome --version | awk '{print $3}' | cut -d'.' -f1) && \
+    echo "Chrome version: $CHROME_VERSION" && \
+    CHROMEDRIVER_VERSION=$(curl -s "https://googlechromelabs.github.io/chrome-for-testing/LATEST_RELEASE_${CHROME_VERSION}") && \
+    echo "ChromeDriver version: $CHROMEDRIVER_VERSION" && \
+    wget -q -O /tmp/chromedriver-linux64.zip "https://storage.googleapis.com/chrome-for-testing-public/${CHROMEDRIVER_VERSION}/linux64/chromedriver-linux64.zip" && \
+    unzip /tmp/chromedriver-linux64.zip -d /tmp/ && \
+    mv /tmp/chromedriver-linux64/chromedriver /usr/local/bin/chromedriver && \
+    chmod +x /usr/local/bin/chromedriver && \
+    rm -rf /tmp/chromedriver-linux64.zip /tmp/chromedriver-linux64
 
 # Configurar diretório de trabalho
 WORKDIR /app
