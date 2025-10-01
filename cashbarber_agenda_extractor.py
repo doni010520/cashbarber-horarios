@@ -8,7 +8,7 @@ Para usar:
   python cashbarber_agenda_extractor.py <email> <senha> --date YYYY-MM-DD [--headless]
 
 Dependências:
-  pip install selenium webdriver-manager
+  pip install selenium
 
 Observações:
   - O script utiliza seletores CSS baseados na estrutura atual do painel.
@@ -28,6 +28,7 @@ import argparse
 import datetime as _dt
 import re
 import sys
+import os
 from typing import Dict, List, Tuple, Optional
 
 from selenium import webdriver
@@ -36,7 +37,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 
 # URL base
 LOGIN_URL = "https://painel.cashbarber.com.br/login"
@@ -144,9 +144,17 @@ def login_cashbarber(email: str, password: str, headless: bool = False) -> webdr
         options.add_argument("--headless")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
-
-    service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=options)
+    
+    # Usar o ChromeDriver do caminho especificado ou do PATH
+    chromedriver_path = os.environ.get('CHROMEDRIVER_PATH', 'chromedriver')
+    
+    try:
+        service = Service(executable_path=chromedriver_path)
+        driver = webdriver.Chrome(service=service, options=options)
+    except Exception as e:
+        # Fallback: tentar sem especificar o service (usa PATH)
+        driver = webdriver.Chrome(options=options)
+    
     driver.get(LOGIN_URL)
 
     wait = WebDriverWait(driver, 20)
