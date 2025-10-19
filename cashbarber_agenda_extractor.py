@@ -1,3 +1,4 @@
+
 """
 Script completo para automatizar o login no painel Cashbarber, navegar até a
 página de agendamentos, ir para uma data específica via os botões de navegação
@@ -29,7 +30,6 @@ import datetime as _dt
 import re
 import sys
 import os
-import time
 from typing import Dict, List, Tuple, Optional
 
 from selenium import webdriver
@@ -140,24 +140,11 @@ def compute_free_slots(events: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
 
 def login_cashbarber(email: str, password: str, headless: bool = False) -> webdriver.Chrome:
     """Realiza o login e retorna o driver autenticado."""
-    print(f"[DEBUG] Iniciando login para: {email}")
-    
     options = webdriver.ChromeOptions()
     if headless:
-        options.add_argument("--headless=new")  # Novo modo headless
+        options.add_argument("--headless")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--disable-gpu")
-    
-    # Argumentos adicionais para evitar detecção de automação
-    options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option('useAutomationExtension', False)
-    options.add_argument("--window-size=1920,1080")
-    options.add_argument("--start-maximized")
-    
-    # User agent realista
-    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
     
     # Usar o ChromeDriver do caminho especificado ou do PATH
     chromedriver_path = os.environ.get('CHROMEDRIVER_PATH', 'chromedriver')
@@ -165,125 +152,36 @@ def login_cashbarber(email: str, password: str, headless: bool = False) -> webdr
     try:
         service = Service(executable_path=chromedriver_path)
         driver = webdriver.Chrome(service=service, options=options)
-        print("[DEBUG] Chrome iniciado com sucesso")
     except Exception as e:
-        print(f"[DEBUG] Erro ao iniciar Chrome com service: {e}")
         # Fallback: tentar sem especificar o service (usa PATH)
         driver = webdriver.Chrome(options=options)
-        print("[DEBUG] Chrome iniciado com fallback")
     
-    # Remove propriedades que denunciam automação
-    driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-    
+    driver.get(LOGIN_URL)
+
+    wait = WebDriverWait(driver, 20)
+    email_input = wait.until(EC.presence_of_element_located((By.NAME, "email")))
+    password_input = wait.until(EC.presence_of_element_located((By.NAME, "password")))
+
+    email_input.clear()
+    email_input.send_keys(email)
+    password_input.clear()
+    password_input.send_keys(password)
+
+    # Botão de login pode ser identificado por id ou texto
     try:
-        print(f"[DEBUG] Acessando URL: {LOGIN_URL}")
-        driver.get(LOGIN_URL)
-        
-        # Aguarda um pouco para página carregar completamente
-        time.sleep(2)
-        
-        print(f"[DEBUG] Página carregada. URL atual: {driver.current_url}")
-        print(f"[DEBUG] Título da página: {driver.title}")
+        login_button = driver.find_element(By.ID, "kt_login_signin_submit")
+    except NoSuchElementException:
+        login_button = driver.find_element(By.XPATH, "//button[contains(., 'Acessar')]")
+    login_button.click()
 
-        wait = WebDriverWait(driver, 30)  # Aumentado para 30 segundos
-        
-        print("[DEBUG] Aguardando campo de email...")
-        email_input = wait.until(EC.presence_of_element_located((By.NAME, "email")))
-        print("[DEBUG] Campo de email encontrado")
-        
-        print("[DEBUG] Aguardando campo de senha...")
-        password_input = wait.until(EC.presence_of_element_located((By.NAME, "password")))
-        print("[DEBUG] Campo de senha encontrado")
-
-        # Aguarda elementos serem clicáveis
-        email_input = wait.until(EC.element_to_be_clickable((By.NAME, "email")))
-        password_input = wait.until(EC.element_to_be_clickable((By.NAME, "password")))
-
-        # Simula digitação humana com pequenos delays
-        email_input.clear()
-        time.sleep(0.1)
-        email_input.send_keys(email)
-        print("[DEBUG] Email preenchido")
-        
-        time.sleep(0.2)
-        password_input.clear()
-        time.sleep(0.1)
-        password_input.send_keys(password)
-        print("[DEBUG] Senha preenchida")
-        
-        time.sleep(0.3)
-
-        # Botão de login pode ser identificado por id ou texto
-        print("[DEBUG] Procurando botão de login...")
-        try:
-            login_button = driver.find_element(By.ID, "kt_login_signin_submit")
-            print("[DEBUG] Botão encontrado por ID")
-        except NoSuchElementException:
-            print("[DEBUG] Botão não encontrado por ID, tentando por XPATH...")
-            try:
-                login_button = driver.find_element(By.XPATH, "//button[contains(., 'Acessar')]")
-                print("[DEBUG] Botão encontrado por XPATH")
-            except NoSuchElementException:
-                # Tenta outros seletores comuns
-                login_button = driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
-                print("[DEBUG] Botão encontrado por CSS selector")
-        
-        # Aguarda botão ser clicável
-        login_button = wait.until(EC.element_to_be_clickable(login_button))
-        
-        login_button.click()
-        print("[DEBUG] Botão de login clicado")
-
-        # Aguarda sair da URL de login
-        print("[DEBUG] Aguardando redirecionamento...")
-        try:
-            wait.until(lambda drv: "/login" not in drv.current_url)
-            print(f"[DEBUG] Login bem-sucedido! URL atual: {driver.current_url}")
-            
-            # Aguarda um pouco para garantir que a página carregou
-            time.sleep(2)
-            
-            return driver
-            
-        except TimeoutException:
-            print(f"[ERROR] Timeout ao aguardar redirecionamento. URL atual: {driver.current_url}")
-            print(f"[ERROR] Título da página: {driver.title}")
-            
-            # Verifica se há mensagens de erro na página
-            try:
-                error_elements = driver.find_elements(By.CSS_SELECTOR, ".alert, .error, .alert-danger, [role='alert']")
-                if error_elements:
-                    print(f"[ERROR] Mensagens de erro encontradas na página:")
-                    for elem in error_elements:
-                        if elem.text.strip():
-                            print(f"  - {elem.text.strip()}")
-            except:
-                pass
-            
-            # Captura screenshot se possível
-            try:
-                screenshot_path = "/tmp/login_error.png"
-                driver.save_screenshot(screenshot_path)
-                print(f"[DEBUG] Screenshot salvo em {screenshot_path}")
-            except Exception as e:
-                print(f"[DEBUG] Não foi possível salvar screenshot: {e}")
-            
-            # Captura página HTML para debug
-            try:
-                html_path = "/tmp/login_error.html"
-                with open(html_path, "w", encoding="utf-8") as f:
-                    f.write(driver.page_source)
-                print(f"[DEBUG] HTML da página salvo em {html_path}")
-            except Exception as e:
-                print(f"[DEBUG] Não foi possível salvar HTML: {e}")
-            
-            driver.quit()
-            raise RuntimeError("Falha no login: verifique as credenciais ou se o site está acessível.")
-    
-    except Exception as e:
-        print(f"[ERROR] Exceção durante login: {type(e).__name__}: {e}")
+    # Aguarda sair da URL de login
+    try:
+        wait.until(lambda drv: "/login" not in drv.current_url)
+    except TimeoutException:
         driver.quit()
-        raise
+        raise RuntimeError("Falha no login: verifique as credenciais ou se o site está acessível.")
+
+    return driver
 
 
 def navigate_to_date(driver: webdriver.Chrome, target_date: _dt.date) -> None:
@@ -293,51 +191,29 @@ def navigate_to_date(driver: webdriver.Chrome, target_date: _dt.date) -> None:
     (classe ``date-text``) e clica no botão de avanço ou retrocesso
     conforme necessário. Pode executar vários cliques se a data estiver distante.
     """
-    wait = WebDriverWait(driver, 30)
-    print(f"[DEBUG] Navegando para data: {target_date}")
-    
+    wait = WebDriverWait(driver, 20)
     # Localiza o elemento de texto da data
     date_label = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".date-text")))
     current_date = parse_header_date(date_label.text)
-    print(f"[DEBUG] Data atual no calendário: {current_date}")
-    
     # Navega até a data alvo
-    clicks = 0
-    max_clicks = 365  # Proteção contra loop infinito
-    
-    while current_date != target_date and clicks < max_clicks:
+    while current_date != target_date:
         # Determina direção: 1 para futuro (próximo), -1 para passado (anterior)
         direction = 1 if target_date > current_date else -1
-        
         # Localiza setas (assume que existem dois SVGs dentro do contêiner .arrow-buttons)
         arrow_buttons = driver.find_elements(By.CSS_SELECTOR, ".arrow-buttons svg")
         if len(arrow_buttons) < 2:
             raise RuntimeError("Não foi possível localizar os botões de navegação do calendário.")
-        
         # Seleciona a seta: índice 1 para avançar (direita), 0 para voltar (esquerda)
         idx = 1 if direction > 0 else 0
         arrow_buttons[idx].click()
-        clicks += 1
-        
-        # Pequeno delay para dar tempo da animação
-        time.sleep(0.3)
-        
         # Aguarda a data mudar
         try:
             wait.until(lambda drv: parse_header_date(drv.find_element(By.CSS_SELECTOR, ".date-text").text) != current_date)
         except TimeoutException:
             raise RuntimeError("Data não mudou após clicar no botão de navegação. Seletores podem estar incorretos.")
-        
         date_label = driver.find_element(By.CSS_SELECTOR, ".date-text")
         current_date = parse_header_date(date_label.text)
-        
-        if clicks % 10 == 0:
-            print(f"[DEBUG] Progresso: {clicks} cliques, data atual: {current_date}")
-    
-    if clicks >= max_clicks:
-        raise RuntimeError(f"Número máximo de cliques atingido ({max_clicks}). Data alvo pode estar muito distante.")
-    
-    print(f"[DEBUG] Navegação concluída. Data final: {current_date}")
+
 
 
 def extract_agenda(driver: webdriver.Chrome) -> Dict[str, Dict[str, List[str]]]:
@@ -347,34 +223,20 @@ def extract_agenda(driver: webdriver.Chrome) -> Dict[str, Dict[str, List[str]]]:
     valores contêm duas listas: ``events`` (compromissos) e ``free``
     (intervalos livres no formato HH:MM - HH:MM).
     """
-    wait = WebDriverWait(driver, 30)
-    print("[DEBUG] Extraindo agenda...")
-    
+    wait = WebDriverWait(driver, 20)
     # Aguarda carregar cabeçalho de recursos
     wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".rbc-row-resource .rbc-header span")))
-    
-    # Aguarda um pouco para garantir que todos os eventos carregaram
-    time.sleep(2)
-    
     # Obtém nomes dos profissionais
     prof_elems = driver.find_elements(By.CSS_SELECTOR, ".rbc-row-resource .rbc-header span")
     prof_names = [e.text.strip() for e in prof_elems if e.text.strip()]
-    print(f"[DEBUG] Profissionais encontrados: {prof_names}")
-    
     # Obtém colunas de agenda (deve corresponder ao número de profissionais)
     day_slots = driver.find_elements(By.CSS_SELECTOR, ".rbc-day-slot.rbc-time-column")
-    print(f"[DEBUG] Colunas de agenda encontradas: {len(day_slots)}")
-    
     agenda: Dict[str, Dict[str, List[str]]] = {}
-    
     for name, slot in zip(prof_names, day_slots):
         # Cada slot contém vários eventos
         events = []  # lista de (inicio_min, fim_min, descricao)
         # Encontrar eventos, intervalos e bloqueios
         event_elements = slot.find_elements(By.CSS_SELECTOR, ".rbc-event, .break, .blocked")
-        
-        print(f"[DEBUG] Profissional {name}: {len(event_elements)} eventos encontrados")
-        
         for ev in event_elements:
             # Extrai horário
             time_text = ''
@@ -384,7 +246,6 @@ def extract_agenda(driver: webdriver.Chrome) -> Dict[str, Dict[str, List[str]]]:
             except Exception:
                 # Para intervalos e bloqueios, a classe pode não existir; usamos o atributo title ou texto do elemento
                 descr = (ev.get_attribute("title") or ev.text or '').strip()
-            
             # Extrai horário a partir de subelementos ou atributo title
             try:
                 # Classe "horario"
@@ -399,32 +260,24 @@ def extract_agenda(driver: webdriver.Chrome) -> Dict[str, Dict[str, List[str]]]:
                     m = re.search(r"\d{1,2}:\d{2}\s*[–-]\s*\d{1,2}:\d{2}", attr)
                     if m:
                         time_text = m.group(0)
-            
             if not time_text:
                 continue  # Ignora se não há horário
-            
             try:
                 start_min, end_min = parse_time_range(time_text)
             except ValueError:
                 continue
-            
             events.append((start_min, end_min, descr))
-        
         # Ordena eventos por início
         events_sorted = sorted(events, key=lambda x: x[0])
         busy_intervals = [(s, e) for s, e, _ in events_sorted]
         free_intervals = compute_free_slots(busy_intervals)
-        
         # Formata para strings
         events_str = [f"{minutes_to_hhmm(s)} - {minutes_to_hhmm(e)}: {d}" for s, e, d in events_sorted]
         free_str = [f"{minutes_to_hhmm(s)} - {minutes_to_hhmm(e)}" for s, e in free_intervals]
-        
         agenda[name] = {
             'events': events_str,
             'free': free_str,
         }
-    
-    print(f"[DEBUG] Extração concluída. {len(agenda)} profissionais processados")
     return agenda
 
 
@@ -460,7 +313,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         # Extrai agenda
         agenda = extract_agenda(driver)
         # Imprime o resultado de forma legível
-        print(f"\nAgenda para {target_date.strftime('%d/%m/%Y')}:")
+        print(f"Agenda para {target_date.strftime('%d/%m/%Y')}:")
         for prof, data in agenda.items():
             print(f"\nProfissional: {prof}")
             print(" Compromissos:")
@@ -477,8 +330,6 @@ def main(argv: Optional[List[str]] = None) -> int:
                 print("  (Sem intervalos livres)")
     except Exception as exc:
         print(f"Erro: {exc}")
-        import traceback
-        traceback.print_exc()
         return 1
     finally:
         if driver:
